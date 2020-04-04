@@ -49,7 +49,7 @@ public:
 	ABRCharacter();
 
 protected:
-	virtual void BeginPlay();
+	void BeginPlay() override;
 
 public:
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
