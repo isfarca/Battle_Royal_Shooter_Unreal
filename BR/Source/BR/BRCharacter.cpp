@@ -12,6 +12,7 @@
 #include "MotionControllerComponent.h"
 #include "XRMotionControllerBase.h" // for FXRMotionControllerBase::RightHandSourceId
 #include "Engine/Engine.h"
+#include "Net/UnrealNetwork.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogFPChar, Warning, All);
 
@@ -87,7 +88,7 @@ ABRCharacter::ABRCharacter()
 
 void ABRCharacter::BeginPlay()
 {
-	// Call the base class  
+	// Call the base class
 	Super::BeginPlay();
 
 	//Attach gun mesh component to Skeleton, doing it here because the skeleton is not yet created in the constructor
@@ -104,6 +105,13 @@ void ABRCharacter::BeginPlay()
 		VR_Gun->SetHiddenInGame(true, true);
 		Mesh1P->SetHiddenInGame(false, true);
 	}
+}
+
+void ABRCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ABRCharacter, Killer);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -139,50 +147,79 @@ void ABRCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputC
 	PlayerInputComponent->BindAxis("LookUpRate", this, &ABRCharacter::LookUpAtRate);
 }
 
+void ABRCharacter::ServerOnFire_Implementation()
+{
+	OnFire();
+}
+
+void ABRCharacter::OnRep_Killer()
+{
+	if (IsLocallyControlled())
+	{
+		ShowDeathScreen();
+	}
+
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	GetMesh()->SetSimulatePhysics(true);
+	GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+	GetMesh()->SetCollisionResponseToAllChannels(ECR_Block);
+
+	SetLifeSpan(10.0F);
+}
+
 void ABRCharacter::OnFire()
 {
-	// try and fire a projectile
-	if (ProjectileClass != NULL)
+	if (!HasAuthority())
 	{
-		UWorld* const World = GetWorld();
-		if (World != NULL)
+		// try and play the sound if specified
+		if (FireSound != nullptr)
 		{
-			if (bUsingMotionControllers)
+			UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
+		}
+	
+		// try and play a firing animation if specified
+		if (FireAnimation != nullptr)
+		{
+			// Get the animation object for the arms mesh
+			UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
+			if (AnimInstance != nullptr)
 			{
-				const FRotator SpawnRotation = VR_MuzzleLocation->GetComponentRotation();
-				const FVector SpawnLocation = VR_MuzzleLocation->GetComponentLocation();
-				World->SpawnActor<ABRProjectile>(ProjectileClass, SpawnLocation, SpawnRotation);
-			}
-			else
-			{
-				const FRotator SpawnRotation = GetControlRotation();
-				// MuzzleOffset is in camera space, so transform it to world space before offsetting from the character location to find the final muzzle position
-				const FVector SpawnLocation = ((FP_MuzzleLocation != nullptr) ? FP_MuzzleLocation->GetComponentLocation() : GetActorLocation()) + SpawnRotation.RotateVector(GunOffset);
-
-				//Set Spawn Collision Handling Override
-				FActorSpawnParameters ActorSpawnParams;
-				ActorSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
-
-				// spawn the projectile at the muzzle
-				World->SpawnActor<ABRProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, ActorSpawnParams);
+				AnimInstance->Montage_Play(FireAnimation, 1.f);
 			}
 		}
-	}
 
-	// try and play the sound if specified
-	if (FireSound != NULL)
-	{
-		UGameplayStatics::PlaySoundAtLocation(this, FireSound, GetActorLocation());
+		ServerOnFire();
 	}
-
-	// try and play a firing animation if specified
-	if (FireAnimation != NULL)
+	else
 	{
-		// Get the animation object for the arms mesh
-		UAnimInstance* AnimInstance = Mesh1P->GetAnimInstance();
-		if (AnimInstance != NULL)
+		// try and fire a projectile
+		if (ProjectileClass != nullptr)
 		{
-			AnimInstance->Montage_Play(FireAnimation, 1.f);
+			UWorld* const World = GetWorld();
+			if (World != nullptr)
+			{
+				if (bUsingMotionControllers)
+				{
+					const FRotator SpawnRotation = VR_MuzzleLocation->GetComponentRotation();
+					const FVector SpawnLocation = VR_MuzzleLocation->GetComponentLocation();
+					World->SpawnActor<ABRProjectile>(ProjectileClass, SpawnLocation, SpawnRotation);
+				}
+				else
+				{
+					const FRotator SpawnRotation = GetControlRotation();
+					// MuzzleOffset is in camera space, so transform it to world space before offsetting from the character location to find the final muzzle position
+					const FVector SpawnLocation = ((FP_MuzzleLocation != nullptr) ? FP_MuzzleLocation->GetComponentLocation() : GetActorLocation()) + SpawnRotation.RotateVector(GunOffset);
+	
+					//Set Spawn Collision Handling Override
+					FActorSpawnParameters ActorSpawnParams;
+					ActorSpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButDontSpawnIfColliding;
+					ActorSpawnParams.Owner = this;
+	
+					// spawn the projectile at the muzzle
+					World->SpawnActor<ABRProjectile>(ProjectileClass, SpawnLocation, SpawnRotation, ActorSpawnParams);
+				}
+			}
 		}
 	}
 }

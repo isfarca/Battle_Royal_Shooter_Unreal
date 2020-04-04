@@ -13,6 +13,15 @@ class ABRGameMode : public AGameModeBase
 
 public:
 	ABRGameMode();
+
+	void PostLogin(APlayerController* NewPlayer) override;
+
+	void PlayerDied(class ABRCharacter* Killed, class ABRCharacter* Killer);
+
+	void WinnerFound(class ABRPlayerState* Winner);
+
+	UPROPERTY(Transient)
+	TArray<class ABRPlayerController*> AlivePlayers;
 };
 
 

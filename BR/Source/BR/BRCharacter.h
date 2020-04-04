@@ -50,6 +50,7 @@ public:
 
 protected:
 	void BeginPlay() override;
+	void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 public:
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
@@ -80,7 +81,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Gameplay)
 	uint32 bUsingMotionControllers : 1;
 
+public:
+
+	UPROPERTY(ReplicatedUsing = OnRep_Killer, BlueprintReadOnly, Category = Gameplay)
+	ABRCharacter* Killer;
+
+	UFUNCTION()
+	void OnRep_Killer();
+
+	UFUNCTION(BlueprintImplementableEvent)
+	void ShowDeathScreen();
+
 protected:
+
+	UFUNCTION(Server, Reliable)
+	void ServerOnFire();
 	
 	/** Fires a projectile. */
 	void OnFire();

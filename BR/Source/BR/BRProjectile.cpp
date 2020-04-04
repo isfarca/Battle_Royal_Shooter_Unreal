@@ -1,6 +1,9 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "BRProjectile.h"
+
+#include "BRCharacter.h"
+#include "BRGameMode.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Components/SphereComponent.h"
 
@@ -29,15 +32,25 @@ ABRProjectile::ABRProjectile()
 
 	// Die after 3 seconds by default
 	InitialLifeSpan = 3.0f;
+
+	SetReplicates(true);
+	AActor::SetReplicateMovement(true);
 }
 
 void ABRProjectile::OnHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	// Only add impulse and destroy projectile if we hit a physics
-	if ((OtherActor != NULL) && (OtherActor != this) && (OtherComp != NULL) && OtherComp->IsSimulatingPhysics())
+	if (HasAuthority())
 	{
-		OtherComp->AddImpulseAtLocation(GetVelocity() * 100.0f, GetActorLocation());
+		if (ABRCharacter* HitPlayer = Cast<ABRCharacter>(OtherActor))
+		{
+			if (ABRGameMode* Gm = Cast<ABRGameMode>(GetWorld()->GetAuthGameMode()))
+			{
+				ABRCharacter* Killer = Cast<ABRCharacter>(GetOwner());
+				Gm->PlayerDied(HitPlayer, Killer);
 
-		Destroy();
+				HitPlayer->Killer = Killer;
+				HitPlayer->OnRep_Killer();
+			}
+		}
 	}
 }
